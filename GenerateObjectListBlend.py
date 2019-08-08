@@ -1,7 +1,8 @@
 import bpy
 from bpy.types import Operator
 from bpy_extras.object_utils import AddObjectHelper, object_data_add
-from mathutils import Vector
+from mathutils import Vector, Matrix, Quaternion, Euler
+import math
 from pathlib import Path
 import json
 import sys
@@ -171,6 +172,9 @@ def func_generateobjectlistsblend():
 
                         subblock_iter+=1
 
+                        if len(subblockObjects) == 0:
+                            continue
+
                         # Join objects together
                         bpy.ops.object.select_all(action='DESELECT')
                         for sbo in subblockObjects:
@@ -210,6 +214,8 @@ def func_generateobjectlistsblend():
                         # Deselect again
                         bpy.ops.object.select_all(action='DESELECT')
 
+                    if len(subblockObjects) == 0:
+                        continue
                     subblockObjects[0].name = "object_"+str(entry_iter)
                     subblockObjects[0].location = (int(((entry_iter+1)%10)*5), (int((entry_iter+1)/10)*5), 0)
                 
@@ -256,6 +262,7 @@ def func_buildanimations():
                         bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
                         animLength = stateData["animationLength"]
+                        bpy.context.scene.frame_end = animLength
 
                         bpy.ops.object.select_all(action='DESELECT')
 
@@ -264,13 +271,32 @@ def func_buildanimations():
                         for instance in stateData["instances"]:
 
                             famObj = bpy.data.objects[("object_"+str(instance["familyObjectIndex"]))]
+
+                            print("famObj: "+str(famObj))
+                            print("instance: "+str(instance))
+
                             famObj.select = True
-                            bpy.ops.object.duplicate(linked=True)
+                            copiedFamObj =  famObj.copy()
+                            bpy.context.scene.objects.link(copiedFamObj)
 
                             if instance["channelId"] not in stateObjs:
                                 stateObjs[instance["channelId"]] = {}
 
-                            stateObjs[instance["channelId"]][instance["familyObjectIndex"]] = bpy.context.object
+                            #copiedFamObj = bpy.context.active_object
+
+                            #Set the scale to 1
+                            copiedFamObj.scale = Vector( (1, 1, 1) )
+                            #Set the location at rest (edit) pose bone position
+                            copiedFamObj.location = Vector ( (0,0,0) )
+
+                            print("stateObjs["+str(instance["channelId"])+"]["+str(instance["familyObjectIndex"])+"] = "+copiedFamObj.name)
+
+                            stateObjs[instance["channelId"]][instance["familyObjectIndex"]] = copiedFamObj
+
+                            for frame in range(0,animLength):
+                                copiedFamObj.hide = not(bool(instance["visibilities"][frame]))
+                                copiedFamObj.hide_render = not(bool(instance["visibilities"][frame]))
+                                copiedFamObj.keyframe_insert(data_path="hide" ,frame=frame)
 
                         # Create Armature for state
                         armature = bpy.data.armatures.new("armature")
@@ -281,9 +307,12 @@ def func_buildanimations():
                         bpy.context.scene.objects.active = armatureObject
                         bpy.ops.object.mode_set(mode='EDIT', toggle=False)
                         edit_bones = armatureObject.data.edit_bones
-                        
+
                         for channelID in stateData["channels"].keys():
                             
+                            # Edit mode to create bones
+                            bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+
                             if (channelID == "$type"):
                                 continue
 
@@ -292,18 +321,93 @@ def func_buildanimations():
                             # a new bone will have zero length and not be kept
                             # move the head/tail to keep the bone
 
+                            #bx = float(channel["positions"][0]["z"])
+                            #by = float(channel["positions"][0]["x"])
+                            #bz = float(channel["positions"][0]["y"])
+
                             bx = float(channel["positions"][0]["x"])
                             by = float(channel["positions"][0]["y"])
                             bz = float(channel["positions"][0]["z"])
 
-                            print(channelID)
-                            print(str((bx, by, bz)))
+                            #rx = float(channel["rotations"][0]["y"]) # swap x and y for quaternions
+                            #ry = float(channel["rotations"][0]["x"]) 
+                            #rz = float(channel["rotations"][0]["z"])
+                            #rw = -float(channel["rotations"][0]["w"])
 
-                            b.head = (bx, by, bz)
-                            b.tail = (bx, by, bz + 0.1)
+
+                            b.head = (0, 0.1, 0)
+                            b.tail = (0, 0, 0)
+                            #b.transform(Quaternion((rx,ry,rz,rw)).to_matrix())
+
+
+                            # Object mode to parent objects to bones
+                            bpy.ops.object.mode_set(mode='OBJECT')
+                            for stateObj in stateObjs[int(channelID)].values():
+
+                                stateObj.parent = armatureObject
+                                stateObj.parent_type = 'BONE'
+                                stateObj.parent_bone = b.name
+                                stateObj.location = (0,0,0)
 
                         # exit edit mode to save bones so they can be used in pose mode
                         bpy.ops.object.mode_set(mode='OBJECT')
+
+                        for channelID in stateData["channels"].keys():
+                            
+                            if (channelID == "$type"):
+                                continue
+    
+                            for frame in range(0,animLength):
+
+                                # enter pose mode
+                                bpy.ops.object.mode_set(mode='POSE')
+
+                                channel = stateData["channels"][channelID]
+                                b = armatureObject.pose.bones['Channel_'+str(channelID)]
+                                # a new bone will have zero length and not be kept
+                                # move the head/tail to keep the bone
+
+                                bx = float(channel["positions"][frame]["x"])
+                                by = float(channel["positions"][frame]["y"])
+                                bz = float(channel["positions"][frame]["z"])
+
+                                #-y,-z-x,w
+
+                                rx = float(channel["rotations"][frame]["x"])
+                                ry = float(channel["rotations"][frame]["y"]) 
+                                rz = float(channel["rotations"][frame]["z"])
+                                rw = float(channel["rotations"][frame]["w"])
+
+                                sx = float(channel["scales"][frame]["x"])
+                                sy = float(channel["scales"][frame]["y"])
+                                sz = float(channel["scales"][frame]["z"])
+
+                                b.location = (bx,bz,by)
+
+                                rot = Quaternion((-rw, rx, rz, ry))
+                                
+                                #rot *= Euler((0, 0, -math.radians(90))).to_quaternion()
+                                
+                                #rot *= Euler((0, math.radians(90), 0)).to_quaternion()
+                                #rot *= Euler((0, 0, math.radians(90))).to_quaternion()
+                                #rot *= Euler((-math.radians(90), 0, 0)).to_quaternion()
+
+                                b.rotation_quaternion = rot
+                                b.scale = (sx, sz, sy)
+
+                                #b.transform(Quaternion((rx,ry,rz,rw)).to_matrix())
+
+                                #b.head = (bx, by-0.1, bz)
+                                #b.tail = (bx, by, bz)
+                            
+                                # Object Mode for keyframe insertion
+                                bpy.ops.object.mode_set(mode='OBJECT')
+                            
+                                #b.keyframe_insert(data_path="hide" ,frame=frame)
+                                #b.keyframe_insert(data_path="hide_render" ,frame=frame)
+                                b.keyframe_insert(data_path="location" ,frame=frame)
+                                b.keyframe_insert(data_path="rotation_quaternion" ,frame=frame)
+                                b.keyframe_insert(data_path="scale" ,frame=frame)
 
 
                     op = blendPath / (familyName + "_" + val_objectlist + ("_State"+str(stateIndex))+".blend")

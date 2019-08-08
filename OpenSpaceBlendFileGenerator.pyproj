@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>43494cf2-0eac-4049-8c41-d7c2bcd4a8df</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>OpenSpaceBlendFileGenerator.py</StartupFile>
+    <StartupFile>OpenSpaceBlendFileGenerator.py.old</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -21,7 +21,8 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="OpenSpaceBlendFileGenerator.py" />
+    <Compile Include="GenerateObjectListBlend.py" />
+    <Compile Include="raymaputil.py" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in
