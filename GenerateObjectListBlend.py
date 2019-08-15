@@ -64,11 +64,11 @@ argv = sys.argv;
 argv = argv[argv.index("--") + 1:]  # get all args after "--"
 function = argv[0]
 
-def func_generateobjectlistsblend():
+def func_generateobjectlistsblend(exportsRoot, familyName, outputPath):
 
-    exportsRootPath = Path(argv[1])
-    familyName = argv[2] # family .json file
-    outputPath = argv[3] # .blend file that will be output
+    exportsRootPath = Path(exportsRoot)
+    familyName = familyName # family .json file
+    outputPath = outputPath # .blend file that will be output
 
     familyPath = exportsRootPath / "Families" / familyName / ("Family_"+familyName+".json")
 
@@ -123,6 +123,7 @@ def func_generateobjectlistsblend():
                             mat = bpy.data.materials.get("vismat_"+visualMaterialHash)
                             if mat is None:
                                 mat = bpy.data.materials.new(name="vismat_"+visualMaterialHash)
+                                mat.specular_intensity = 0
                                 tex = bpy.data.textures.get("texture_"+visualMaterialHash)
                                 if tex is None:
                                     tex = bpy.data.textures.new("texture_"+visualMaterialHash, "IMAGE")
@@ -170,6 +171,75 @@ def func_generateobjectlistsblend():
                             bpy.context.scene.objects.link(subblockObject)
                             subblockObjects.append(subblockObject)
 
+                        elif subblock["$type"] == "OpenSpaceImplementation.Visual.SpriteElement":
+
+                            sprites = subblock["sprites"]
+                            firstSprite = sprites[0];
+
+                            visualMaterialHash = firstSprite["visualMaterial"]["Hash"]
+
+                            visualMaterial = loadMaterialJson(exportsRootPath / "Materials" / ("VisualMaterial_"+visualMaterialHash+".json"))
+                            texture = visualMaterial["textures"][0]["texture"]
+                            textureName = ""
+                            if texture is not None:
+                                textureName = texture["name"]
+
+                            mat = bpy.data.materials.get("vismat_"+visualMaterialHash)
+                            if mat is None:
+                                mat = bpy.data.materials.new(name="vismat_"+visualMaterialHash)
+                                tex = bpy.data.textures.get("texture_"+visualMaterialHash)
+                                if tex is None:
+                                    tex = bpy.data.textures.new("texture_"+visualMaterialHash, "IMAGE")
+
+                                    texturePath = exportsRootPath / "Resources"/ "Textures"/(textureName+".png")
+
+                                    img = bpy.data.images.load(str(texturePath.absolute()), True)
+                                    tex.image = img
+                                    slot = mat.texture_slots.add()
+                                    slot.texture = tex
+
+                            mesh = bpy.data.meshes.new(name="sprite_subblock_"+str(subblock_iter))
+
+                            spriteSize = firstSprite["info_scale"];
+                            spriteSizeX = firstSprite["info_scale"]["x"];
+                            spriteSizeY = firstSprite["info_scale"]["y"];
+
+                            plane_vertices = [
+                                (-spriteSizeX,0,-spriteSizeY),
+                                (spriteSizeX,0,-spriteSizeY),
+                                (spriteSizeX,0,spriteSizeY),
+                                (-spriteSizeX,0,spriteSizeY)
+                            ];
+                            plane_faces = [(0,1,2,3)];
+                            mesh.from_pydata(plane_vertices, [], plane_faces);
+
+                            plane_uvs = [
+                                (0,0),
+                                (1,0),
+                                (1,1),
+                                (0,1)
+                            ];
+
+                            subblockObject = bpy.data.objects.new("subblock_"+str(subblock_iter), mesh)
+                            subblockObject.data.materials.append(mat)
+
+                            face = subblockObject.data.polygons[0]
+                            for vert_idx, loop_idx in zip(face.vertices, face.loop_indices):
+                                uv_layer = mesh.uv_layers.active
+                                if (uv_layer is None):
+                                    uv_layer = mesh.uv_textures.new("uvs")
+                                    uv_layer.active = True
+
+                                uv_coords = subblockObject.data.uv_layers.active.data[loop_idx].uv
+                                
+                                uv_coords.x = plane_uvs[vert_idx][0]
+                                uv_coords.y = plane_uvs[vert_idx][1]
+
+                            bpy.context.scene.objects.link(subblockObject)
+                            subblockObjects.append(subblockObject) 
+
+                            print("Plane")
+                            
                         subblock_iter+=1
 
                         if len(subblockObjects) == 0:
@@ -195,9 +265,6 @@ def func_generateobjectlistsblend():
 
                         bm = bmesh.new()
 
-                        print("meshes")
-                        print(meshes)
-
                         for m in meshes:
                             bm.from_mesh(m)
                             bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=distance)
@@ -215,19 +282,22 @@ def func_generateobjectlistsblend():
                         bpy.ops.object.select_all(action='DESELECT')
 
                     if len(subblockObjects) == 0:
+                        print("no object_"+str(entry_iter))
                         continue
                     subblockObjects[0].name = "object_"+str(entry_iter)
                     subblockObjects[0].location = (int(((entry_iter+1)%10)*5), (int((entry_iter+1)/10)*5), 0)
+
+                    print("object_"+str(entry_iter))
                 
                 op = Path(outputPath) / ("Family_" + familyName + "_" + val_objectlist + ".blend")
                 bpy.ops.wm.save_as_mainfile(filepath=str(op))
 
 
-def func_buildanimations():
+def func_buildanimations(exportsRoot, familyName, blendFileDir):
 
     exportsRootPath = Path(argv[1])
     familyName = argv[2] # family .json file
-    blendPath = Path(argv[3]) # directory of .blend object lists 
+    blendPath = Path(blendFileDir) # directory of .blend object lists 
 
     familyPath = exportsRootPath / "Families" / familyName / ("Family_"+familyName+".json")
 
@@ -243,12 +313,15 @@ def func_buildanimations():
                 objectListDataStore = json.load(olf)
                 
                 states = datastore["states"]
+                stateCount = len(states)
+
+                objectsToKeep = []
 
                 for state in states:
                     stateIndex = state["index"]
                     statePath = familyPath.parent / ("State_" + str(stateIndex) + ".json")
 
-                    print(str(stateIndex)+" "+str(statePath))
+                    print("State "+str(stateIndex)+"/"+str(stateCount))
 
                     with open(str(statePath)) as sf:
                         stateData = json.load(sf)
@@ -270,14 +343,17 @@ def func_buildanimations():
 
                         for instance in stateData["instances"]:
 
-                            famObj = bpy.data.objects[("object_"+str(instance["familyObjectIndex"]))]
+                            objectName = ("object_"+str(instance["familyObjectIndex"]))
 
-                            print("famObj: "+str(famObj))
-                            print("instance: "+str(instance))
+                            if (not(objectName in bpy.data.objects)):
+                                print("Didn't find "+objectName)
+                                continue
+                            famObj = bpy.data.objects[objectName]
 
                             famObj.select = True
                             copiedFamObj =  famObj.copy()
                             bpy.context.scene.objects.link(copiedFamObj)
+                            objectsToKeep.append(copiedFamObj)
 
                             if instance["channelId"] not in stateObjs:
                                 stateObjs[instance["channelId"]] = {}
@@ -288,8 +364,6 @@ def func_buildanimations():
                             copiedFamObj.scale = Vector( (1, 1, 1) )
                             #Set the location at rest (edit) pose bone position
                             copiedFamObj.location = Vector ( (0,0,0) )
-
-                            print("stateObjs["+str(instance["channelId"])+"]["+str(instance["familyObjectIndex"])+"] = "+copiedFamObj.name)
 
                             stateObjs[instance["channelId"]][instance["familyObjectIndex"]] = copiedFamObj
 
@@ -302,6 +376,7 @@ def func_buildanimations():
                         armature = bpy.data.armatures.new("armature")
                         armatureObject = bpy.data.objects.new(('Armature_'+str(stateIndex)), armature)
                         bpy.context.scene.objects.link(armatureObject)
+                        objectsToKeep.append(armatureObject)
 
                         # Set edit mode
                         bpy.context.scene.objects.active = armatureObject
@@ -316,32 +391,24 @@ def func_buildanimations():
                             if (channelID == "$type"):
                                 continue
 
+                            if (int(channelID) not in stateObjs):
+                                continue
+
                             channel = stateData["channels"][channelID]
                             b = edit_bones.new('Channel_'+str(channelID))
                             # a new bone will have zero length and not be kept
                             # move the head/tail to keep the bone
 
-                            #bx = float(channel["positions"][0]["z"])
-                            #by = float(channel["positions"][0]["x"])
-                            #bz = float(channel["positions"][0]["y"])
-
                             bx = float(channel["positions"][0]["x"])
                             by = float(channel["positions"][0]["y"])
                             bz = float(channel["positions"][0]["z"])
 
-                            #rx = float(channel["rotations"][0]["y"]) # swap x and y for quaternions
-                            #ry = float(channel["rotations"][0]["x"]) 
-                            #rz = float(channel["rotations"][0]["z"])
-                            #rw = -float(channel["rotations"][0]["w"])
-
-
-                            b.head = (0, 0.1, 0)
+                            b.head = (0, 0.0001, 0)
                             b.tail = (0, 0, 0)
-                            #b.transform(Quaternion((rx,ry,rz,rw)).to_matrix())
-
 
                             # Object mode to parent objects to bones
                             bpy.ops.object.mode_set(mode='OBJECT')
+
                             for stateObj in stateObjs[int(channelID)].values():
 
                                 stateObj.parent = armatureObject
@@ -363,7 +430,12 @@ def func_buildanimations():
                                 bpy.ops.object.mode_set(mode='POSE')
 
                                 channel = stateData["channels"][channelID]
-                                b = armatureObject.pose.bones['Channel_'+str(channelID)]
+                                channelName = 'Channel_'+str(channelID)
+
+                                if (channelName not in armatureObject.pose.bones):
+                                    continue
+
+                                b = armatureObject.pose.bones[channelName]
                                 # a new bone will have zero length and not be kept
                                 # move the head/tail to keep the bone
 
@@ -385,21 +457,10 @@ def func_buildanimations():
                                 b.location = (bx,bz,by)
 
                                 rot = Quaternion((-rw, rx, rz, ry))
-                                
-                                #rot *= Euler((0, 0, -math.radians(90))).to_quaternion()
-                                
-                                #rot *= Euler((0, math.radians(90), 0)).to_quaternion()
-                                #rot *= Euler((0, 0, math.radians(90))).to_quaternion()
-                                #rot *= Euler((-math.radians(90), 0, 0)).to_quaternion()
 
                                 b.rotation_quaternion = rot
                                 b.scale = (sx, sz, sy)
-
-                                #b.transform(Quaternion((rx,ry,rz,rw)).to_matrix())
-
-                                #b.head = (bx, by-0.1, bz)
-                                #b.tail = (bx, by, bz)
-                            
+                                
                                 # Object Mode for keyframe insertion
                                 bpy.ops.object.mode_set(mode='OBJECT')
                             
@@ -410,21 +471,28 @@ def func_buildanimations():
                                 b.keyframe_insert(data_path="scale" ,frame=frame)
 
 
+                    scene = bpy.context.screen.scene
+                    
+                    # Remove objects.
+                    for object_ in scene.objects:
+                        if (object_ not in objectsToKeep):
+                            bpy.data.objects.remove(object_, True)
+
                     op = blendPath / (familyName + "_" + val_objectlist + ("_State"+str(stateIndex))+".blend")
                     bpy.ops.wm.save_as_mainfile(filepath=str(op))
 
-                        #for frame in range(0, animLength):
-
-
-                    #with open(str(statePath), 'r', encoding='utf-8') as sf:
-                        #bpy.context.scene.objects
-
-                #op = Path(outputPath) / (p.stem + "_" + val_objectlist + ".blend")
-                #bpy.ops.wm.save_as_mainfile(filepath=str(op))
-
 if function == 'generateObjectLists':
-    func_generateobjectlistsblend()
+    exportsRoot = argv[1]
+    familyName = argv[2] # family .json file
+    outputPath = argv[3] # .blend file that will be output
+
+    func_generateobjectlistsblend(exportsRoot, familyName, outputPath)
 elif function == 'buildAnimations':
-    func_buildanimations()
+
+    exportsRoot = argv[1]
+    familyName = argv[2] # family .json file
+    blendFileDir = argv[3] # directory of .blend object lists 
+
+    func_buildanimations(exportsRoot, familyName, blendFileDir)
 else:
     print("Unknown function "+function+", please provide either generateObjectLists or buildAnimations as a function")
