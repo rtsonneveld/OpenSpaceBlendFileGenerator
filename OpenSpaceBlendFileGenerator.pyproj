@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>43494cf2-0eac-4049-8c41-d7c2bcd4a8df</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>OpenSpaceBlendFileGenerator.py.old</StartupFile>
+    <StartupFile>MakeAllAnimations.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -22,6 +22,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="GenerateObjectListBlend.py" />
+    <Compile Include="MakeAllAnimations.py" />
     <Compile Include="raymaputil.py" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />

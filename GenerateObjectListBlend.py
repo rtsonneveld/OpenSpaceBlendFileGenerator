@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 import json
 import sys
+import os
 import bmesh
 
 def delete_scene_objects(scene=None):
@@ -82,6 +83,11 @@ def func_generateobjectlistsblend(exportsRoot, familyName, outputPath):
             objectListPath = familyPath.parent / ("ObjectList_" + val_objectlist + ".json")
             with open(str(objectListPath), 'r', encoding='utf-8') as olf:
                 objectListDataStore = json.load(olf)
+
+                op = Path(outputPath) / familyName / ("Family_" + familyName + "_" + val_objectlist + ".blend")
+                
+                if not op.parent.exists():
+                    os.makedirs(str(op.parent))
 
                 for val in objectListDataStore:
                     entry_iter += 1
@@ -289,8 +295,7 @@ def func_generateobjectlistsblend(exportsRoot, familyName, outputPath):
 
                     print("object_"+str(entry_iter))
                 
-                op = Path(outputPath) / ("Family_" + familyName + "_" + val_objectlist + ".blend")
-                bpy.ops.wm.save_as_mainfile(filepath=str(op))
+                bpy.ops.wm.save_as_mainfile(filepath=str(op.absolute()), relative_remap = True)
 
 
 def func_buildanimations(exportsRoot, familyName, blendFileDir):
@@ -329,7 +334,7 @@ def func_buildanimations(exportsRoot, familyName, blendFileDir):
 
                         delete_scene_objects()
 
-                        blendFilePath = Path(blendPath) / ("Family_"+familyName+"_"+val_objectlist+".blend")
+                        blendFilePath = Path(blendPath) / familyName / ("Family_"+familyName+"_"+val_objectlist+".blend")
 
                         bpy.ops.wm.open_mainfile(filepath=str(blendFilePath))
                         bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
@@ -340,6 +345,9 @@ def func_buildanimations(exportsRoot, familyName, blendFileDir):
                         bpy.ops.object.select_all(action='DESELECT')
 
                         stateObjs = {}
+
+                        if (stateData["instances"] is None):
+                            continue
 
                         for instance in stateData["instances"]:
 
@@ -478,8 +486,10 @@ def func_buildanimations(exportsRoot, familyName, blendFileDir):
                         if (object_ not in objectsToKeep):
                             bpy.data.objects.remove(object_, True)
 
-                    op = blendPath / (familyName + "_" + val_objectlist + ("_State"+str(stateIndex))+".blend")
-                    bpy.ops.wm.save_as_mainfile(filepath=str(op))
+                    op = blendPath / familyName / (familyName + "_" + val_objectlist + ("_State"+str(stateIndex))+".blend")
+                    if not op.parent.exists():
+                        os.makedirs(str(op.parent))
+                    bpy.ops.wm.save_as_mainfile(filepath=str(op.absolute()), relative_remap = True)
 
 if function == 'generateObjectLists':
     exportsRoot = argv[1]
