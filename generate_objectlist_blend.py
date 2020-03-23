@@ -132,14 +132,14 @@ def func_generateobjectlistsblend(exports_root, family_name, output_path):
 
         entry_iter = -1
 
-        for val_objectlist in family_data["objectLists"]:
+        for val_objectlist in family_data["objectListReferences"]:
 
             objectlist_path = family_path.parent / \
-                ("ObjectList_" + val_objectlist + ".json")
+                ("ObjectList_" + val_objectlist["Hash"] + ".json")
             with open(str(objectlist_path), 'r', encoding='utf-8') as olf:
                 objectlist_data = json.load(olf)
 
-                objectlist_path = Path(output_path) / family_name / ("Family_" + family_name + "_" + val_objectlist + ".blend")
+                objectlist_path = Path(output_path) / family_name / ("Family_" + family_name + "_" + val_objectlist["Hash"] + ".blend")
 
                 if not objectlist_path.parent.exists():
                     os.makedirs(str(objectlist_path.parent))
@@ -153,19 +153,18 @@ def func_generateobjectlistsblend(exports_root, family_name, output_path):
                     vertices = parse_json_vector3_array(obj["vertices"])
                     normals = parse_json_vector3_array(obj["normals"])
 
-                    subblocks = obj["subblocks"]
+                    subblocks = obj["elements"]
                     subblock_iter = 0
 
                     subblock_objects = []
 
                     for subblock in subblocks:
-
-                        if subblock["$type"] == "OpenSpaceImplementation.Visual.MeshElement":
+                        if subblock["$type"] == "OpenSpaceImplementation.Visual.GeometricObjectElementTriangles":
                             uvs = parse_json_vector2_array(subblock["uvs"])
 
-                            triangles = subblock["disconnected_triangles_spe"]
-                            mapping_uvs_spe = subblock["mapping_uvs_spe"]
-                            subblock_normals = subblock["normals_spe"]
+                            triangles = subblock["triangles"]
+                            mapping_uvs_spe = subblock["mapping_uvs"]
+                            subblock_normals = subblock["normals"]
                             faces = trianglelist_to_facelist(triangles)
 
                             # make blender material from visual material
@@ -339,10 +338,10 @@ def func_buildanimations(exports_root, family_name, blendfile_dir):
 
         entry_iter = -1
 
-        for val_objectlist in datastore["objectLists"]:
+        for val_objectlist in datastore["objectListReferences"]:
 
             objectlist_path = family_path.parent / \
-                ("ObjectList_" + val_objectlist + ".json")
+                ("ObjectList_" + str(val_objectlist["Hash"]) + ".json")
             with open(str(objectlist_path), 'r', encoding='utf-8') as olf:
                 objectlist_data = json.load(olf)
 
@@ -366,7 +365,7 @@ def func_buildanimations(exports_root, family_name, blendfile_dir):
                         delete_scene_objects()
 
                         blendfile_path = Path(
-                            blend_path) / family_name / ("Family_"+family_name+"_"+val_objectlist+".blend")
+                            blend_path) / family_name / ("Family_"+family_name+"_"+str(val_objectlist["Hash"])+".blend")
 
                         bpy.ops.wm.open_mainfile(filepath=str(blendfile_path))
                         bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
@@ -545,7 +544,7 @@ def func_buildanimations(exports_root, family_name, blendfile_dir):
                             bpy.data.objects.remove(object_, do_unlink=True)
 
                     state_blend_path = blend_path / family_name / \
-                        (family_name + "_" + val_objectlist +
+                        (family_name + "_" + str(val_objectlist["Hash"]) +
                          ("_State"+str(state_index))+".blend")
                     if not state_blend_path.parent.exists():
                         os.makedirs(str(state_blend_path.parent))
