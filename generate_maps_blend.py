@@ -92,8 +92,8 @@ def create_blendermaterial_from_visualmaterial(visualmaterial_hash, exports_root
 
             if blend_transparency:
                 mat.blend_method = 'BLEND'
-            if visualmaterial["IsLight"] is True:
-                mat.blend_method = 'ADD'
+            #if visualmaterial["IsLight"] is True: TODO: fix this
+                #mat.blend_method = 'ADD'
             
             vismat_diffuse_coef = parse_json_vector3(visualmaterial["diffuseCoef"])
             vismat_ambient_coef = parse_json_vector3(visualmaterial["ambientCoef"])
@@ -204,7 +204,7 @@ def func_generate_map_blend(exports_root, level_name, output_path):
                 light_blenddata.specular_factor = 0.5
                 light_blenddata.shadow_soft_size = light_info["far"] * 2
                 light_blenddata.energy = light_info["far"] * 600
-                light_blenddata.shadow_buffer_soft = 25
+                #light_blenddata.shadow_buffer_soft = 25
             elif (light_type == 4): # ambient
                 ambient_lights[light_name] = color
                 print("Found ambient color: "+light_name+" = "+str(color))
@@ -214,7 +214,7 @@ def func_generate_map_blend(exports_root, level_name, output_path):
                 light_blenddata.shadow_soft_size = 1000
                 light_blenddata.energy = 1
                 light_blenddata.specular_factor = 0
-                light_blenddata.shadow_buffer_soft = 25
+                #light_blenddata.shadow_buffer_soft = 25
             else:
                 continue
 
@@ -259,7 +259,8 @@ def func_generate_map_blend(exports_root, level_name, output_path):
                 visuals = geom_dict["Visuals"]
                 vertices = parse_json_vector3_array(visuals["vertices"])
                 normals = parse_json_vector3_array(visuals["normals"])
-                subblocks = visuals["subblocks"]
+
+                subblocks = visuals["elements"]
 
                 subblock_objects = []
 
@@ -267,12 +268,12 @@ def func_generate_map_blend(exports_root, level_name, output_path):
 
                 for subblock in subblocks:
 
-                    if subblock["$type"] == "OpenSpaceImplementation.Visual.MeshElement":
+                    if subblock["$type"] == "OpenSpaceImplementation.Visual.GeometricObjectElementTriangles":
                         uvs = parse_json_vector2_array(subblock["uvs"])
 
-                        triangles = subblock["disconnected_triangles_spe"]
-                        mapping_uvs_spe = subblock["mapping_uvs_spe"]
-                        subblock_normals = subblock["normals_spe"]
+                        triangles = subblock["triangles"]
+                        mapping_uvs_spe = subblock["mapping_uvs"]
+                        subblock_normals = subblock["normals"]
                         faces = trianglelist_to_facelist(triangles)
 
                         # make blender material from visual material
@@ -323,7 +324,7 @@ def func_generate_map_blend(exports_root, level_name, output_path):
                         bpy.context.scene.collection.objects.link(subblock_object)
                         subblock_objects.append(subblock_object)
 
-                    elif subblock["$type"] == "OpenSpaceImplementation.Visual.SpriteElement":
+                    elif subblock["$type"] == "OpenSpaceImplementation.Visual.GeometricObjectElementSprites":
 
                         sprites = subblock["sprites"]
                         sprite_first = sprites[0]
@@ -625,6 +626,7 @@ def func_generate_map_blend(exports_root, level_name, output_path):
 delete_scene_objects()
 
 ARGV = sys.argv
+
 ARGV = ARGV[ARGV.index("--") + 1:]  # get all args after "--"
 
 EXPORTS_ROOT = ARGV[0]
